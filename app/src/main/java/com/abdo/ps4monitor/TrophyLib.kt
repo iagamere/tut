@@ -394,6 +394,58 @@ object TrophyLib {
         return null
     }
 
+
+    /**
+     * Games that are not synced with PSN have no row in trophy_net.db. The console then keeps the account's progress for that game in
+     * /user/home/<id>/trophy/data/<...>/<NPWR>/TROPUSR.DAT (the PS3-style trophy user file: big-endian, magic 81 8F 54 AD, a table of tables;
+     * table 6 holds one entry per trophy with its unlocked flag and time). Layout taken from the PS3 format (RPCS3 documents it); NOT verified
+     * on a PS4, so every step writes what it found into [notes]. Returns trophy id -> unlock time (seconds), or null when nothing usable was found.
+     */
+    private fun readUsr(ps4: Ps4, account: Account, npwr: String, notes: MutableList<String>): Map<Int, Long>? {
+        val key = npwr.substringBefore('_').uppercase()
+        if (key.isEmpty()) return null
+        val root = "/user/home/${account.id}/trophy/data"
+        val dirs = ArrayList<String>()
+        fun walk(path: String, depth: Int) {
+            val l = try { Ps4Server.fsList(ps4, path, 8000) } catch (e: Exception) { if (depth == 0) notes += "$path: ${e.message}"; return }
+            if (depth == 0) notes += "$path: " + l.take(12).joinToString { (if (it.isDir) "[" + it.name + "]" else it.name + " " + it.size + " B") }
+            for (e in l) if (e.isDir) { val p = "$path/${e.name}"; if (e.name.uppercase().contains(key)) dirs += p else if (depth < 3) walk(p, depth + 1) }
+        }
+        walk(root, 0)
+        if (dirs.isEmpty()) { notes += "${account.name}: no $key folder under $root (no local progress file for this game)"; return null }
+        for (d in dirs) {
+            val l = try { Ps4Server.fsList(ps4, d, 8000) } catch (e: Exception) { notes += "$d: ${e.message}"; continue }
+            notes += "$d: " + l.take(12).joinToString { (if (it.isDir) "[" + it.name + "]" else it.name + " " + it.size + " B") }
+            val f = l.firstOrNull { !it.isDir && it.name.equals("TROPUSR.DAT", true) } ?: continue
+            val path = "$d/${f.name}"
+            val b = try { Ps4Server.fsRead(ps4, path, 0, f.size.coerceIn(1L, 4L shl 20).toInt(), 15000) } catch (e: Exception) { notes += "$path: ${e.message}"; continue }
+            if (b.size < 0x30 || be32(b, 0) != 0x818F54ADL) { notes += "$path: unknown header: " + hex(b, 32); continue }
+            val tables = be32(b, 8).toInt()
+            if (tables !in 1..16 || 0x30 + tables * 0x20 > b.size) { notes += "$path: odd table count $tables (header " + hex(b, 48) + ")"; continue }
+            val out = HashMap<Int, Long>(); val sum = StringBuilder()
+            for (t in 0 until tables) {
+                val o = 0x30 + t * 0x20
+                val type = be32(b, o).toInt(); val esz = be32(b, o + 4).toInt(); val cnt = be32(b, o + 8).toInt(); val off = be64(b, o + 16)
+                sum.append("[type $type: $cnt x $esz] ")
+                if (type != 6 || esz !in 0x20..0x400 || cnt !in 1..4000) continue
+                for (i in 0 until cnt) {
+                    val eo = off + i.toLong() * (esz + 0x10)
+                    if (eo < 0 || eo + 0x30 > b.size) break
+                    val e = eo.toInt()
+                    val id = be32(b, e + 8).toInt(); val state = be32(b, e + 0x14)
+                    if (state == 0L) continue
+                    val ticks = be64(b, e + 0x20)                     // microseconds since year 1 (CellRtcTick)
+                    val secs = ticks / 1_000_000 - 62_135_596_800L
+                    out[id] = if (secs in 946_684_800L..4_102_444_800L) secs else 0L
+                }
+            }
+            notes += "$path (${b.size} B): $sum -> ${out.size} unlocked"
+            if (out.isNotEmpty()) return out
+            notes += "table 6 gave no unlocked trophies; header: " + hex(b, 48)
+        }
+        return null
+    }
+
     /** Unlocked trophies of [account] for the game with NPWR id [npwr]. */
     fun state(ps4: Ps4, account: Account, npwr: String, cache: File, gameTitle: String = ""): TrophyState {
         run {
@@ -401,6 +453,8 @@ object TrophyLib {
             val opened = BooleanArray(1)
             val r = accountDb(ps4, account, npwr, gameTitle, cache, n, opened)
             if (r != null) return TrophyState(r.trophies.filter { it.unlocked }.associate { it.id to it.time }, n, r)
+            // not synced with PSN: look for the account's own progress file of this game
+            runCatching { readUsr(ps4, account, npwr, n) }.getOrNull()?.let { return TrophyState(it, n) }
             // the database was read and simply has no entry for this game: this account has not played it (0%), no need to scan other files
             if (opened[0]) return TrophyState(emptyMap(), n)
             // otherwise fall through to the generic search below; keep the reason
