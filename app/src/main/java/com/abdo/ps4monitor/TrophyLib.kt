@@ -87,8 +87,37 @@ object TrophyLib {
     fun loadPack(ps4: Ps4, titleId: String, npwrs: List<String>, notes: MutableList<String> = ArrayList()): TrophyPack? {
         val dirs = baseDirs(titleId).map { "$it/trophy" } + npwrs.flatMap { listOf("/user/trophy/conf/$it", "/user/trophy/conf/${it.substringBefore('_')}") }
         for (dir in dirs) loadPackFrom(ps4, dir, npwrs, notes)?.let { return it }
+        // Downloaded (digital) games keep no trophy folder next to their files: the pack lives in the console's shared trophy folders,
+        // in a folder whose name contains the NPWR id (the suffix and the exact parent folder differ between firmware versions), so look for it by id.
+        for (dir in findNpwrDirs(ps4, npwrs, notes)) loadPackFrom(ps4, dir, npwrs, notes)?.let { return it }
         return null
     }
+
+    private val TROPHY_ROOTS = listOf("/user/trophy/conf", "/user/trophy/data", "/user/trophy", "/system_data/priv/trophy")
+
+    /** Folders under the console's trophy roots (up to 3 levels) whose name contains one of the games' NPWR numbers; also a TRP file named after the id. */
+    private fun findNpwrDirs(ps4: Ps4, npwrs: List<String>, notes: MutableList<String>): List<String> {
+        val keys = npwrs.map { it.substringBefore('_').uppercase() }.filter { it.isNotEmpty() }.distinct()
+        if (keys.isEmpty()) return emptyList()
+        val found = LinkedHashSet<String>()
+        fun walk(path: String, depth: Int) {
+            val l = try { Ps4Server.fsList(ps4, path, 8000) } catch (e: Exception) { return }
+            for (e in l) {
+                val p = "$path/${e.name}"
+                val hit = keys.any { e.name.uppercase().contains(it) }
+                if (e.isDir) {
+                    if (hit) found += p
+                    else if (depth < 2 && out_ok(e.name)) walk(p, depth + 1)
+                } else if (hit && e.name.endsWith(".trp", true)) found += path
+            }
+        }
+        for (r in TROPHY_ROOTS) walk(r, 0)
+        notes += if (found.isEmpty()) "No folder with ${keys.joinToString()} under ${TROPHY_ROOTS.joinToString()}: the game's trophy pack is not registered on this console (it is created when the game runs for the first time)."
+                 else "Trophy folders found by id: " + found.joinToString()
+        return found.toList()
+    }
+    /** Do not descend into account folders or the pictures folders of other games. */
+    private fun out_ok(name: String) = !HEX8.matches(name) && !name.equals("screenshot", true)
 
     private fun norm(s: String) = s.lowercase().filter { it.isLetterOrDigit() }
 
@@ -97,7 +126,8 @@ object TrophyLib {
         val root = "/user/trophy/conf"
         val dirs = try { Ps4Server.fsList(ps4, root, 8000).also { notes += "$root: ${it.size} entries" } } catch (e: Exception) { notes += "$root: ${e.message}"; return null }
         val want = norm(gameTitle)
-        for (d in dirs.filter { it.isDir }.take(80)) {
+        notes += "$root: " + dirs.take(12).joinToString { it.name } + if (dirs.size > 12) " ..." else ""
+        for (d in dirs.filter { it.isDir }.take(200)) {
             val p = loadPackFrom(ps4, "$root/${d.name}", emptyList(), ArrayList()) ?: continue
             val t = norm(p.title)
             if (t.isNotEmpty() && want.isNotEmpty() && (t == want || t.contains(want) || want.contains(t))) return p
@@ -278,6 +308,7 @@ object TrophyLib {
         val dir = "$tdir/db"
         notes += "$tdir: " + (try { Ps4Server.fsList(ps4, tdir, 8000).joinToString { (if (it.isDir) "[" + it.name + "]" else it.name) } } catch (e: Exception) { e.message ?: "?" })
         val l = try { Ps4Server.fsList(ps4, dir, 8000) } catch (e: Exception) { notes += "$dir: ${e.message}"; return null }
+        notes += "$dir: " + l.take(12).joinToString { "${it.name} (${it.size} B)" }
         // trophy_local.db is where Apollo finds the trophies; any other .db in the folder is checked for the same tables and described when it does not match
         val files = l.filter { !it.isDir && it.name.endsWith(".db", true) }.sortedByDescending { it.name == "trophy_local.db" }
         if (files.isEmpty()) { notes += "$dir has no .db file (found: " + l.take(12).joinToString { it.name } + ")"; return null }

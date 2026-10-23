@@ -146,7 +146,7 @@ private class TrophyData(val accounts: List<Account>, val pack: TrophyPack?, val
             val all = dbNotes + d.notes
             val clip = androidx.compose.ui.platform.LocalClipboardManager.current
             TextButton(onClick = { clip.setText(androidx.compose.ui.text.AnnotatedString(all.joinToString("\n"))) }) { Lbl(tr("Copy technical details", "نسخ التفاصيل التقنية")) }
-            NoteList((listOf(if (d.npwrs.isEmpty()) "No NPWR id found for ${g.titleId}." else "NPWR: ${d.npwrs.joinToString()}") + all).take(8))
+            NoteList((listOf(if (d.npwrs.isEmpty()) "No NPWR id found for ${g.titleId}." else "NPWR: ${d.npwrs.joinToString()}") + all).take(16))
         }
         return
     }
