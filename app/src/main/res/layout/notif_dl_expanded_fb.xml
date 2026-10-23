@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FULL-BLEED expanded card (targetSdk <= 30, no notification style) with its own app header row. Expanded download card: cover + title, real progress bar, percentage / sizes / time left / speed, two labelled buttons. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="wrap_content">
+
+    <ImageView android:id="@+id/bg" android:layout_width="match_parent" android:layout_height="match_parent"
+        android:scaleType="fitXY" android:src="@drawable/notif_flat_bg" android:importantForAccessibility="no" />
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:padding="14dp">
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp" android:orientation="horizontal" android:gravity="center_vertical">
+            <ImageView android:id="@+id/app_glyph" android:layout_width="16dp" android:layout_height="16dp"
+                android:src="@drawable/ic_stat_ps4" android:importantForAccessibility="no" />
+            <TextView android:id="@+id/app_name" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                android:layout_marginStart="6dp" android:maxLines="1" android:ellipsize="end" android:textSize="12sp"
+                android:text="PS4 Download Monitor" />
+            <TextView android:id="@+id/eta" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginStart="8dp" android:maxLines="1" android:textSize="12sp" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical">
+            <ImageView android:id="@+id/cover" android:layout_width="56dp" android:layout_height="56dp"
+                android:scaleType="centerCrop" android:importantForAccessibility="no" />
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                android:layout_marginStart="12dp" android:orientation="vertical">
+                <TextView android:id="@+id/title" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:maxLines="2" android:ellipsize="end" android:textSize="15sp" android:textStyle="bold"
+                    android:fontFamily="sans-serif-medium" />
+                <TextView android:id="@+id/state" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp" android:maxLines="1" android:ellipsize="end"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <ProgressBar android:id="@+id/bar" style="@android:style/Widget.ProgressBar.Horizontal"
+            android:layout_width="match_parent" android:layout_height="6dp" android:layout_marginTop="12dp"
+            android:minHeight="6dp" android:maxHeight="6dp" android:max="1000" android:progress="0"
+            android:indeterminate="false" android:progressDrawable="@drawable/notif_progress" />
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="6dp" android:orientation="horizontal" android:gravity="center_vertical">
+            <TextView android:id="@+id/pct" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:textSize="13sp" android:textStyle="bold" android:fontFamily="sans-serif-medium" />
+            <TextView android:id="@+id/size" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                android:layout_marginStart="8dp" android:gravity="end" android:maxLines="1" android:ellipsize="end"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="2dp" android:orientation="horizontal" android:gravity="center_vertical">
+            <TextView android:id="@+id/left" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                android:maxLines="1" android:ellipsize="end" android:textSize="12sp" />
+            <TextView android:id="@+id/speed" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginStart="8dp" android:maxLines="1" android:textSize="12sp" android:textStyle="bold"
+                android:fontFamily="sans-serif-medium" />
+        </LinearLayout>
+
+        <TextView android:id="@+id/hint" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="6dp" android:maxLines="2" android:ellipsize="end" android:textSize="12sp"
+            android:visibility="gone" />
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="10dp" android:orientation="horizontal">
+            <FrameLayout android:id="@+id/btn_toggle" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1"
+                android:layout_marginEnd="8dp">
+                <ImageView android:id="@+id/btn_toggle_bg" android:layout_width="match_parent" android:layout_height="match_parent"
+                    android:scaleType="fitXY" android:src="@drawable/notif_pill_bg" android:importantForAccessibility="no" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent"
+                    android:orientation="horizontal" android:gravity="center">
+                    <ImageView android:id="@+id/btn_toggle_icon" android:layout_width="18dp" android:layout_height="18dp"
+                        android:importantForAccessibility="no" />
+                    <TextView android:id="@+id/btn_toggle_label" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp" android:maxLines="1" android:textSize="13sp" android:textStyle="bold"
+                        android:fontFamily="sans-serif-medium" />
+                </LinearLayout>
+            </FrameLayout>
+            <FrameLayout android:id="@+id/btn_delete" android:layout_width="0dp" android:layout_height="36dp" android:layout_weight="1">
+                <ImageView android:id="@+id/btn_delete_bg" android:layout_width="match_parent" android:layout_height="match_parent"
+                    android:scaleType="fitXY" android:src="@drawable/notif_pill_bg" android:importantForAccessibility="no" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent"
+                    android:orientation="horizontal" android:gravity="center">
+                    <ImageView android:id="@+id/btn_delete_icon" android:layout_width="18dp" android:layout_height="18dp"
+                        android:importantForAccessibility="no" />
+                    <TextView android:id="@+id/btn_delete_label" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp" android:maxLines="1" android:textSize="13sp" android:textStyle="bold"
+                        android:fontFamily="sans-serif-medium" />
+                </LinearLayout>
+            </FrameLayout>
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

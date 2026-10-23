@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FULL-BLEED collapsed card (targetSdk <= 30, no notification style): the whole notification is this view, ~64dp tall. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="wrap_content">
+
+    <ImageView android:id="@+id/bg" android:layout_width="match_parent" android:layout_height="match_parent"
+        android:scaleType="fitXY" android:src="@drawable/notif_flat_bg" android:importantForAccessibility="no" />
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:gravity="center_vertical"
+        android:paddingStart="12dp" android:paddingEnd="4dp" android:paddingTop="8dp" android:paddingBottom="8dp">
+
+        <ImageView android:id="@+id/cover" android:layout_width="48dp" android:layout_height="48dp"
+            android:scaleType="centerCrop" android:importantForAccessibility="no" />
+
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:layout_marginStart="10dp" android:layout_marginEnd="4dp" android:orientation="vertical">
+            <TextView android:id="@+id/title" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:maxLines="1" android:ellipsize="end" android:textSize="13sp" android:textStyle="bold"
+                android:fontFamily="sans-serif-medium" />
+            <TextView android:id="@+id/stats" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:maxLines="1" android:ellipsize="end" android:textSize="11sp" />
+            <ProgressBar android:id="@+id/bar" style="@android:style/Widget.ProgressBar.Horizontal"
+                android:layout_width="match_parent" android:layout_height="5dp" android:layout_marginTop="4dp"
+                android:minHeight="5dp" android:maxHeight="5dp" android:max="1000" android:progress="0"
+                android:indeterminate="false" android:progressDrawable="@drawable/notif_progress" />
+        </LinearLayout>
+
+        <ImageView android:id="@+id/ib_toggle" android:layout_width="36dp" android:layout_height="36dp"
+            android:padding="8dp" android:scaleType="fitCenter"
+            android:background="?android:attr/selectableItemBackgroundBorderless" />
+        <ImageView android:id="@+id/ib_delete" android:layout_width="36dp" android:layout_height="36dp"
+            android:padding="8dp" android:scaleType="fitCenter"
+            android:background="?android:attr/selectableItemBackgroundBorderless" />
+    </LinearLayout>
+</FrameLayout>

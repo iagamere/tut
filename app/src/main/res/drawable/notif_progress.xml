@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Progress drawable of the notification's real (determinate) ProgressBar: one continuous rounded fill over a rounded track.
+  Android 12+ (API 31): the notification tints both layers with the game's cover colour (RemoteViews.setColorStateList ->
+  ProgressBar.setProgressTintList / setProgressBackgroundTintList, tint mode SRC_IN, so these colours only provide the shape and alpha).
+  Android 8-11: no public way to tint a ProgressBar inside RemoteViews, so these static colours (white on the cover-tinted card) are what is shown.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@android:id/background">
+        <shape android:shape="rectangle">
+            <corners android:radius="4dp" />
+            <solid android:color="#66FFFFFF" />
+            <size android:height="6dp" />
+        </shape>
+    </item>
+    <item android:id="@android:id/progress">
+        <scale android:scaleWidth="100%" android:scaleGravity="start">
+            <shape android:shape="rectangle">
+                <corners android:radius="4dp" />
+                <solid android:color="#FFFFFFFF" />
+                <size android:height="6dp" />
+            </shape>
+        </scale>
+    </item>
+</layer-list>
