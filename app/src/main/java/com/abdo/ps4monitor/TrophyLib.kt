@@ -143,17 +143,22 @@ object TrophyLib {
         return out
     }
 
+    private fun hex(b: ByteArray, n: Int = 32) = b.take(n).joinToString(" ") { "%02X".format(it) }
+
     private fun loadPackFrom(ps4: Ps4, dir: String, npwrs: List<String>, notes: MutableList<String>): TrophyPack? {
-        val trps = try { Ps4Server.fsList(ps4, dir, 8000).filter { !it.isDir && it.name.endsWith(".trp", true) }.sortedBy { it.name } } catch (e: Exception) { notes += "$dir: ${e.message}"; return null }
-        if (trps.isEmpty()) notes += "$dir: no .trp file"
+        val all = try { Ps4Server.fsList(ps4, dir, 8000) } catch (e: Exception) { notes += "$dir: ${e.message}"; return null }
+        val trps = all.filter { !it.isDir && it.name.endsWith(".trp", true) }.sortedBy { it.name }
+        if (trps.isEmpty()) notes += "$dir: no .trp file (found: " + all.take(12).joinToString { (if (it.isDir) "[" + it.name + "]" else it.name + " " + it.size + " B") } + ")"
+        else notes += "$dir: " + all.take(12).joinToString { (if (it.isDir) "[" + it.name + "]" else it.name + " " + it.size + " B") }
         for (t in trps) {
             val path = "$dir/${t.name}"
-            val head = try { Ps4Server.fsRead(ps4, path, 0, 64, 8000) } catch (e: Exception) { continue }
-            if (head.size < 64 || be32(head, 0) != 0xDCA24D00L) continue
+            val head = try { Ps4Server.fsRead(ps4, path, 0, 64, 8000) } catch (e: Exception) { notes += "$path: cannot read (${e.message})"; continue }
+            if (head.size < 64) { notes += "$path: only ${head.size} bytes read"; continue }
+            if (be32(head, 0) != 0xDCA24D00L) { notes += "$path: unknown header: " + hex(head); continue }
             val count = be32(head, 0x10).toInt(); val elSize = be32(head, 0x14).toInt().let { if (it in 0x20..0x100) it else 0x40 }
-            if (count !in 1..4000) continue
-            val table = try { Ps4Server.fsRead(ps4, path, 0x40, count * elSize, 15000) } catch (e: Exception) { continue }
-            if (table.size < count * elSize) continue
+            if (count !in 1..4000) { notes += "$path: odd file count $count (header " + hex(head, 24) + ")"; continue }
+            val table = try { Ps4Server.fsRead(ps4, path, 0x40, count * elSize, 15000) } catch (e: Exception) { notes += "$path: table unreadable (${e.message})"; continue }
+            if (table.size < count * elSize) { notes += "$path: table cut (${table.size} of ${count * elSize} B)"; continue }
             val files = LinkedHashMap<String, Pair<Long, Long>>()
             for (i in 0 until count) {
                 val o = i * elSize
@@ -180,7 +185,7 @@ object TrophyLib {
                 files.keys.mapNotNull { n -> Regex("^TROP(\\d{3})\\.PNG$", RegexOption.IGNORE_CASE).find(n)?.let { n to it.groupValues[1].toInt() } }
                     .sortedBy { it.second }.forEach { (n, id) -> list += Trophy(id, "Trophy %03d".format(id), "", '?', false, n) }
             }
-            if (list.isEmpty()) continue
+            if (list.isEmpty()) { notes += "$path: pack has no trophy pictures or names (entries: " + files.keys.take(8).joinToString() + ")"; continue }
             val npwr = Regex("NPWR\\d{5}_\\d{2}").find(t.name)?.value ?: Regex("NPWR\\d{5}_\\d{2}").find(dir)?.value ?: npwrs.getOrNull(trps.indexOf(t)) ?: npwrs.firstOrNull() ?: ""
             return TrophyPack(npwr, title, list.sortedBy { it.id }, path, files, readable)
         }
