@@ -165,6 +165,30 @@ object TrophyLib {
                 val nm = String(table, o, 32, Charsets.ISO_8859_1).substringBefore('\u0000')
                 files[nm] = be64(table, o + 32) to be64(table, o + 40)
             }
+            val PNG = Regex("^TROP\\d{3}\\.PNG$", RegexOption.IGNORE_CASE)
+            if (files.keys.none { PNG.matches(it) }) {
+                // the table is not where the PS3 layout puts it (PS4 packs differ): show the raw bytes and look for the picture names directly
+                notes += "$path: table not in the expected place (count $count, entry size $elSize). header: " + hex(head, 48) + " | at 0x40: " + hex(table, 32)
+                val scan = try { Ps4Server.fsRead(ps4, path, 0, 0x20000, 15000) } catch (e: Exception) { ByteArray(0) }
+                val txt = String(scan, Charsets.ISO_8859_1)
+                val hits = Regex("TROP\\d{3}\\.PNG", RegexOption.IGNORE_CASE).findAll(txt).map { it.range.first }.toList()
+                if (hits.size >= 2) {
+                    val stride = hits[1] - hits[0]
+                    var start = hits[0]
+                    // step back over earlier entries whose name field still looks like a file name
+                    while (start - stride >= 0 && scan[start - stride].toInt() in 0x20..0x7E && scan[start - stride + 1].toInt() in 0x20..0x7E) start -= stride
+                    val fb = LinkedHashMap<String, Pair<Long, Long>>()
+                    var o = start
+                    while (o + 48 <= scan.size && fb.size < 4000) {
+                        val nm = String(scan, o, 32, Charsets.ISO_8859_1).substringBefore('\u0000')
+                        if (nm.isEmpty() || nm.any { it.code !in 0x20..0x7E }) break
+                        fb[nm] = be64(scan, o + 32) to be64(scan, o + 40)
+                        o += stride
+                    }
+                    notes += "$path: found the file table at 0x${start.toString(16)} with entry size $stride (${fb.size} entries: " + fb.keys.take(6).joinToString() + ")"
+                    if (fb.keys.any { PNG.matches(it) }) { files.clear(); files.putAll(fb) }
+                } else notes += "$path: no TROPnnn.PNG names in the first ${scan.size} bytes" + (if (scan.isNotEmpty()) " (start: " + hex(scan, 64) + ")" else "")
+            }
             val cfg = files.entries.firstOrNull { it.key.endsWith(".SFM", true) }
             val xml = cfg?.let { (_, v) -> runCatching { String(Ps4Server.fsRead(ps4, path, v.first, v.second.coerceAtMost(2L shl 20).toInt(), 15000), Charsets.UTF_8) }.getOrNull() }
             val list = ArrayList<Trophy>(); var title = ""; var readable = false
