@@ -34,7 +34,7 @@ class SrvEntry(val path: String, val bytes: Long, val size: Long, val state: Int
 object Ps4Server {
     const val PORT = 6701
     class Reply(val code: Int, val body: String)
-    private class V2Info(val ok: Boolean, val at: Long, val maxAttempts: Int, val fsRoots: List<String> = emptyList(), val fsApi: Int = 0, val roRoots: List<String> = emptyList(), val trophySync: Boolean = false)
+    private class V2Info(val ok: Boolean, val at: Long, val maxAttempts: Int, val fsRoots: List<String> = emptyList(), val fsApi: Int = 0, val roRoots: List<String> = emptyList())
     private val v2cache = ConcurrentHashMap<String, V2Info>()
     private val locked = ConcurrentHashMap<String, Boolean>()
     /** The server answered 401: it has a token and this app has none (or a wrong one). */
@@ -131,7 +131,7 @@ object Ps4Server {
     // ---------------- status / settings / log of the custom server ----------------
     class ServerInfo(val version: String, val custom: Boolean, val maxParallel: Int, val maxConns: Int, val auto: Boolean, val fixedConns: Int,
                      val fsRoots: List<String> = emptyList(), val fsApi: Int = 0, val tokenSet: Boolean = false, val locked: Boolean = false,
-                     val roRoots: List<String> = emptyList())
+                     val roRoots: List<String> = emptyList(), val trophySync: Boolean = false)
     /** null = not reachable. An original server answers 404 to /v2/info. */
     fun info(ps4: Ps4, timeoutMs: Int = 3000): ServerInfo? = try {
         val r = call(ps4, "GET", "/v2/info", null, timeoutMs)

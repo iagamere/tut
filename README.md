@@ -1,3 +1,8 @@
+# PS4 Download Monitor 5.9.15
+
+## 5.9.15 build fix
+- 5.9.13/5.9.14 failed to compile (the user's GitHub Actions log): the `trophySync` field had been added to the private `V2Info` class instead of `ServerInfo` (two errors: Ps4Server.kt:144, TrophiesUi.kt:114). Fixed; those were the only compile errors in the log.
+
 # PS4 Download Monitor 5.9.14
 
 ## 5.9.14 trophy names from TROP.ESFM
