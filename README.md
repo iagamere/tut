@@ -1,3 +1,13 @@
+# PS4 Download Monitor 6.0.0 (v6)
+
+## 6.0.0 speed
+Found by reading the code (no profiler was available), so the gains are expected, not measured:
+- **Connections are reused.** Every request to the PS4 server used to open a new TCP connection and close it (`disconnect()` after each call), which is slow over Wi-Fi when a screen sends dozens of requests. GET requests now keep their connection (POST still closes it, so a restarted server is not hit by a stale one).
+- **Games list:** each game's param.sfo was read one after the other (up to 300 requests); now six at a time. The result is kept for 60 s (refresh or a deletion forces a new scan).
+- **Captures (screenshots/videos):** folders were listed one by one; now one level at a time with the folders of a level in parallel; kept for 30 s.
+- **Trophies:** the search for a game's trophy folder by id could list hundreds of folders; now at most 14 listings, breadth first, stopping at the first hit. What was read for a game is kept for 5 minutes, so reopening it is instant.
+- Not changed: picture thumbnails are still read whole through the server (inherently slow for large screenshots; they were already limited to 3 at a time and cached in memory and on disk). Not compiled here (no Android SDK).
+
 # PS4 Download Monitor 5.9.17
 
 ## 5.9.17 vector icons instead of emoji

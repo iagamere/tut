@@ -43,29 +43,49 @@ object Ps4Info {
         catch (e: Exception) { notes.add("$path: ${e.message}"); null }
 
     /** Photos and videos under /user/av_contents (and the user's extra folders), newest first. At most [limit] files and [maxDirs] folders are visited. */
-    fun scanCaptures(ps4: Ps4, limit: Int = 2000, maxDirs: Int = 400): CaptureScan {
-        val notes = ArrayList<String>(); val out = ArrayList<Capture>()
+    /** Shared worker threads for the scans below: dozens of small requests to the PS4 are sent six at a time instead of one after the other. */
+    private val pool: java.util.concurrent.ExecutorService = java.util.concurrent.Executors.newFixedThreadPool(6) { r -> Thread(r).apply { isDaemon = true } }
+    private val capCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, CaptureScan>>()
+    private val gamesCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, Pair<List<GameInfo>, List<String>>>>()
+    /** Forget the remembered scans (after deleting a capture or a game). */
+    fun invalidate() { capCache.clear(); gamesCache.clear() }
+
+    fun scanCaptures(ps4: Ps4, limit: Int = 2000, maxDirs: Int = 400, force: Boolean = false): CaptureScan {
+        capCache[ps4.id]?.let { (t, sc) -> if (!force && System.currentTimeMillis() - t < 30_000L) return sc }
+        val notes = java.util.Collections.synchronizedList(ArrayList<String>()); val out = ArrayList<Capture>()
         var dirs = 0; var truncated = false
         // only these two folders: anything else under av_contents (previews, thumbnails...) is ignored on purpose
         val roots = listOf("$CAPTURE_ROOT/photo", "$CAPTURE_ROOT/video")
-        val stack = ArrayDeque<Triple<String, Int, String>>()
-        roots.forEach { stack.add(Triple(it, 0, "")) }
-        while (stack.isNotEmpty()) {
-            val (dir, depth, tid) = stack.removeLast()
+        var level: List<Triple<String, Int, String>> = roots.map { Triple(it, 0, "") }
+        while (level.isNotEmpty()) {
             if (dirs >= maxDirs || out.size >= limit) { truncated = true; break }
-            dirs++
-            val l = listOrNote(ps4, dir, notes) ?: continue
-            for (e in l) {
-                val p = child(dir, e.name)
-                if (e.isDir) { if (depth < 5) stack.add(Triple(p, depth + 1, if (TITLE_ID.matches(e.name)) e.name else tid)) }
-                else {
-                    val x = ext(e.name)
-                    val video = x in VIDEO
-                    if (x in PHOTO || video) { if (out.size < limit) out.add(Capture(p, e.name, e.size, e.mtime, video, tid)) else truncated = true }
+            val take = level.take(maxDirs - dirs)
+            if (take.size < level.size) truncated = true
+            dirs += take.size
+            // one level at a time, the folders of a level are listed in parallel
+            val results = pool.invokeAll(take.map { t -> java.util.concurrent.Callable { t to listOrNote(ps4, t.first, notes) } })
+                .map { runCatching { it.get() }.getOrNull() }
+            val next = ArrayList<Triple<String, Int, String>>()
+            for (r in results) {
+                if (r == null) continue
+                val (t, l) = r
+                if (l == null) continue
+                val (dir, depth, tid) = t
+                for (e in l) {
+                    val p = child(dir, e.name)
+                    if (e.isDir) { if (depth < 5) next.add(Triple(p, depth + 1, if (TITLE_ID.matches(e.name)) e.name else tid)) }
+                    else {
+                        val x = ext(e.name)
+                        val video = x in VIDEO
+                        if (x in PHOTO || video) { if (out.size < limit) out.add(Capture(p, e.name, e.size, e.mtime, video, tid)) else truncated = true }
+                    }
                 }
             }
+            level = next
         }
-        return CaptureScan(out.distinctBy { it.path }.sortedByDescending { it.mtime }, notes, truncated)
+        val sc = CaptureScan(out.distinctBy { it.path }.sortedByDescending { it.mtime }, synchronized(notes) { ArrayList(notes) }, truncated)
+        capCache[ps4.id] = System.currentTimeMillis() to sc
+        return sc
     }
 
     // ---------------- games ----------------
@@ -94,7 +114,8 @@ object Ps4Info {
     private val GAME_DIRS = listOf("/user/app", "/user/appmeta")
 
     /** Installed titles: folder names of /user/app (or /user/appmeta), enriched from each title's param.sfo when the console lets us read it. */
-    fun scanGames(ps4: Ps4, limit: Int = 300, progress: (Int, Int) -> Unit = { _, _ -> }): Pair<List<GameInfo>, List<String>> {
+    fun scanGames(ps4: Ps4, limit: Int = 300, force: Boolean = false, progress: (Int, Int) -> Unit = { _, _ -> }): Pair<List<GameInfo>, List<String>> {
+        gamesCache[ps4.id]?.let { (t, r) -> if (!force && System.currentTimeMillis() - t < 60_000L) { progress(r.first.size, r.first.size); names = r.first.associate { it.titleId to it.title }; return r } }
         val notes = ArrayList<String>(); var ids: List<String> = emptyList()
         for (d in GAME_DIRS) {
             val l = listOrNote(ps4, d, notes) ?: continue
@@ -102,20 +123,28 @@ object Ps4Info {
             if (ids.isNotEmpty()) break
         }
         if (ids.isEmpty()) return emptyList<GameInfo>() to notes
-        val res = ArrayList<GameInfo>()
-        ids.sorted().take(limit).forEachIndexed { i, id ->
-            progress(i, ids.size.coerceAtMost(limit))
-            var sfo: Map<String, String> = emptyMap(); var sfoPath: String? = null; var meta: String? = null
-            for (m in META_DIRS) {
-                val p = "$m/$id/param.sfo"
-                val bytes = try { Ps4Server.fsRead(ps4, p, 0, 64 * 1024, 6000) } catch (e: Exception) { ByteArray(0) }
-                if (bytes.isNotEmpty()) { val s = runCatching { parseSfo(bytes) }.getOrDefault(emptyMap()); if (s.isNotEmpty()) { sfo = s; sfoPath = p; meta = m; break } }
+        val picked = ids.sorted().take(limit)
+        val done = java.util.concurrent.atomic.AtomicInteger(0)
+        progress(0, picked.size)
+        // each title's param.sfo is read on its own worker thread (six at a time)
+        val tasks = picked.map { id ->
+            java.util.concurrent.Callable {
+                var sfo: Map<String, String> = emptyMap(); var sfoPath: String? = null; var meta: String? = null
+                for (m in META_DIRS) {
+                    val p = "$m/$id/param.sfo"
+                    val bytes = try { Ps4Server.fsRead(ps4, p, 0, 64 * 1024, 6000) } catch (e: Exception) { ByteArray(0) }
+                    if (bytes.isNotEmpty()) { val s = runCatching { parseSfo(bytes) }.getOrDefault(emptyMap()); if (s.isNotEmpty()) { sfo = s; sfoPath = p; meta = m; break } }
+                }
+                progress(done.incrementAndGet(), picked.size)
+                GameInfo(id, sfo["TITLE"] ?: id, sfo["APP_VER"] ?: sfo["VERSION"] ?: "", sfo["CATEGORY"] ?: "", meta, sfoPath, sfo)
             }
-            res.add(GameInfo(id, sfo["TITLE"] ?: id, sfo["APP_VER"] ?: sfo["VERSION"] ?: "", sfo["CATEGORY"] ?: "", meta, sfoPath, sfo))
         }
+        val res = ArrayList<GameInfo>(pool.invokeAll(tasks).mapNotNull { runCatching { it.get() }.getOrNull() })
         progress(res.size, res.size)
         names = res.associate { it.titleId to it.title }
-        return res to notes
+        val out = res to notes
+        gamesCache[ps4.id] = System.currentTimeMillis() to out
+        return out
     }
     fun categoryLabel(c: String) = when (c) {
         "gd" -> tr("Game", "لعبة"); "gp" -> tr("Update", "تحديث"); "ac" -> tr("Add-on", "محتوى إضافي"); "gde" -> tr("Game", "لعبة")

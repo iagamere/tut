@@ -52,9 +52,9 @@ object Ps4Server {
         try {
             if (body != null) { c.doOutput = true; c.setRequestProperty("Content-Type", "application/json"); c.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) } }
             val code = c.responseCode
-            val text = runCatching { (if (code < 400) c.inputStream else c.errorStream)?.bufferedReader()?.readText().orEmpty() }.getOrDefault("")
+            val text = runCatching { (if (code < 400) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty() }.getOrDefault("")
             return Reply(code, text)
-        } finally { c.disconnect() }
+        } finally { if (method != "GET") c.disconnect() }      // a fully read GET keeps its connection for the next request (a new TCP connection per call made every screen slow)
     }
     private fun get(ps4: Ps4, path: String, timeoutMs: Int): String {
         val r = call(ps4, "GET", path, null, timeoutMs)
@@ -277,9 +277,9 @@ object Ps4Server {
             val c = open(ps4, "GET", "/v2/fs/read?path=" + enc(path) + "&offset=$off&length=$n", timeoutMs)
             val chunk: ByteArray = try {
                 val code = try { c.responseCode } catch (e: IOException) { fsFailAt[ps4.id] = System.currentTimeMillis(); throw FsUnavailable(Ps4Api.friendly(e)) }
-                if (code == 200) c.inputStream.readBytes()
-                else fsJson(ps4, Reply(code, runCatching { c.errorStream?.bufferedReader()?.readText().orEmpty() }.getOrDefault(""))).let { ByteArray(0) }
-            } finally { c.disconnect() }
+                if (code == 200) c.inputStream.use { it.readBytes() }
+                else fsJson(ps4, Reply(code, runCatching { c.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty() }.getOrDefault(""))).let { ByteArray(0) }
+            } finally { /* no disconnect: the connection is reused */ }
             if (chunk.isEmpty()) break
             out.write(chunk); off += chunk.size; left -= chunk.size
         }

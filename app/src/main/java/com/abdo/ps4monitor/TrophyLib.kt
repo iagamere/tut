@@ -103,18 +103,24 @@ object TrophyLib {
         val keys = npwrs.map { it.substringBefore('_').uppercase() }.filter { it.isNotEmpty() }.distinct()
         if (keys.isEmpty()) return emptyList()
         val found = LinkedHashSet<String>()
-        fun walk(path: String, depth: Int) {
-            val l = try { Ps4Server.fsList(ps4, path, 8000) } catch (e: Exception) { return }
-            for (e in l) {
-                val p = "$path/${e.name}"
-                val hit = keys.any { e.name.uppercase().contains(it) }
-                if (e.isDir) {
-                    if (hit) found += p
-                    else if (depth < 2 && out_ok(e.name)) walk(p, depth + 1)
-                } else if (hit && e.name.endsWith(".trp", true)) found += path
+        var budget = 14                                  // at most this many folder listings (each one is a request to the PS4)
+        // breadth first: the roots first, deeper only while nothing was found
+        var level: List<Pair<String, Int>> = TROPHY_ROOTS.map { it to 0 }
+        while (level.isNotEmpty() && found.isEmpty() && budget > 0) {
+            val next = ArrayList<Pair<String, Int>>()
+            for ((path, depth) in level) {
+                if (budget <= 0) break
+                budget--
+                val l = try { Ps4Server.fsList(ps4, path, 8000) } catch (e: Exception) { continue }
+                for (e in l) {
+                    val p = "$path/${e.name}"
+                    val hit = keys.any { e.name.uppercase().contains(it) }
+                    if (e.isDir) { if (hit) found += p else if (depth < 2 && out_ok(e.name)) next += p to depth + 1 }
+                    else if (hit && e.name.endsWith(".trp", true)) found += path
+                }
             }
+            level = next
         }
-        for (r in TROPHY_ROOTS) walk(r, 0)
         notes += if (found.isEmpty()) "No folder with ${keys.joinToString()} under ${TROPHY_ROOTS.joinToString()}: the game's trophy pack is not registered on this console (it is created when the game runs for the first time)."
                  else "Trophy folders found by id: " + found.joinToString()
         return found.toList()

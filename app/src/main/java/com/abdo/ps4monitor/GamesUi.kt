@@ -40,7 +40,7 @@ import kotlinx.coroutines.withContext
     var q by rememberSaveable { mutableStateOf("") }
     var open by remember { mutableStateOf<GameInfo?>(null) }
     var gone by remember(ps4.id, reload) { mutableStateOf(setOf<String>()) }     // games deleted from this screen
-    LaunchedEffect(ps4.id, reload) { res = null; res = withContext(Dispatchers.IO) { Ps4Info.scanGames(ps4) { d, t -> done = d; total = t } } }
+    LaunchedEffect(ps4.id, reload) { res = null; res = withContext(Dispatchers.IO) { Ps4Info.scanGames(ps4, force = reload != 0) { d, t -> done = d; total = t } } }
     val r = res
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (r == null) { LinearProgressIndicator(progress = { if (total > 0) done.toFloat() / total else 0f }, modifier = Modifier.fillMaxWidth()); Dim(tr("Reading installed games…", "جارٍ قراءة الألعاب المثبتة…") + if (total > 0) " $done/$total" else ""); return@Column }
@@ -179,6 +179,7 @@ import kotlinx.coroutines.withContext
                 step = 3
                 scope.launch {
                     val r = withContext(Dispatchers.IO) { StorageOps.deleteGame(ps4, g.titleId) }
+                    Ps4Info.invalidate()
                     result = r; step = 0
                 }
             }) { Lbl(tr("Delete completely", "حذف نهائيًا") + if (left > 0) " ($left)" else "", color = if (left == 0) MaterialTheme.colorScheme.error else Color.Unspecified) } },

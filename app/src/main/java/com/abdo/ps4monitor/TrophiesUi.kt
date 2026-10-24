@@ -61,6 +61,9 @@ private object UrlIcons {
 
 private class TrophyData(val accounts: List<Account>, val pack: TrophyPack?, val npwrs: List<String>, val notes: List<String>, val serverSync: Boolean = false)
 
+/** What was read for a game is kept for 5 minutes, so going back into the same game's trophies is instant. */
+private object TrophyDataCache { val map = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, TrophyData>>() }
+
 /** Ring with the progress of one account around its picture (PS4 style circles). */
 @Composable private fun AccountCircle(ps4: Ps4, a: Account, pct: Int?, selected: Boolean, onClick: () -> Unit) {
     val img by produceState<Bitmap?>(Thumbs.peekAny(ps4, a.avatarPaths, 128), a.id) { if (value == null) value = Thumbs.loadAny(ps4, a.avatarPaths, 128) }
@@ -118,6 +121,9 @@ private class TrophyData(val accounts: List<Account>, val pack: TrophyPack?, val
     var data by remember(ps4.id, g.titleId) { mutableStateOf<TrophyData?>(null) }
     var syncMsg by remember { mutableStateOf("") }
     LaunchedEffect(ps4.id, g.titleId) {
+        val ck = ps4.id + "|" + g.titleId
+        val hit = TrophyDataCache.map[ck]
+        if (hit != null && System.currentTimeMillis() - hit.first < 300_000L) { data = hit.second; return@LaunchedEffect }
         data = withContext(Dispatchers.IO) {
             val sup = Ps4Server.info(ps4, 3000)?.trophySync == true
             if (sup) { try { TrophySync.ensure(ps4, false) { syncMsg = it } } catch (e: Exception) { } }
@@ -129,6 +135,7 @@ private class TrophyData(val accounts: List<Account>, val pack: TrophyPack?, val
             if (pk == null) notes += TrophyLib.listing(ps4, g.titleId)
             TrophyData(acc, pk, npwrs, notes, sup)
         }
+        data?.let { TrophyDataCache.map[ck] = System.currentTimeMillis() to it }
     }
     val d = data
     if (d == null) { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { LinearProgressIndicator(Modifier.fillMaxWidth()); Dim(tr("Reading trophies…", "جارٍ قراءة الإنجازات…")); if (syncMsg.isNotEmpty()) Dim(syncMsg) }; return }
