@@ -1,3 +1,10 @@
+# PS4 Download Monitor 5.9.13
+
+## 5.9.13 trophy export built into the server (abdo17), no per-game button
+- Bundled server is now `2.0.0-abdo17`: new routes `POST /v2/trophy/sync` (starts a background export, returns at once) and `GET /v2/trophy/status`. It goes through every account's `/user/home/<id>/trophy/data/NPWR#####_##/`, mounts each `trophy.img` (the method the stand-alone helper used successfully on the user's console) and copies the files to `/data/ezremote-client/trophy_export/<account>_<NPWR>/`. A `_stamp` file (size + mtime of the image after our own unmount) makes later runs skip unchanged images. `_BK` folders are ignored. `/v2/info` now has `"trophy_sync": 1`.
+- App: opening any game's trophies runs the sync once (not again for 2 minutes) and then reads the export, so no button per game. A "Refresh from the console" button forces a new copy after you earn something. With an older server the 5.9.10 helper panel is still shown.
+- NOT verified: the mount code has only run as a separate payload, never inside the server; it runs in a background thread, so a failed mount cannot block downloads, but a crash inside the console's mount call would still stop the server. The app is not compiled (no Android SDK). The server links (Orbis toolchain) but was not run.
+
 # PS4 Download Monitor 5.9.12
 
 ## 5.9.12 unsynced trophies are now read from the sealed image

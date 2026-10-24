@@ -34,7 +34,7 @@ class SrvEntry(val path: String, val bytes: Long, val size: Long, val state: Int
 object Ps4Server {
     const val PORT = 6701
     class Reply(val code: Int, val body: String)
-    private class V2Info(val ok: Boolean, val at: Long, val maxAttempts: Int, val fsRoots: List<String> = emptyList(), val fsApi: Int = 0, val roRoots: List<String> = emptyList())
+    private class V2Info(val ok: Boolean, val at: Long, val maxAttempts: Int, val fsRoots: List<String> = emptyList(), val fsApi: Int = 0, val roRoots: List<String> = emptyList(), val trophySync: Boolean = false)
     private val v2cache = ConcurrentHashMap<String, V2Info>()
     private val locked = ConcurrentHashMap<String, Boolean>()
     /** The server answered 401: it has a token and this app has none (or a wrong one). */
@@ -141,10 +141,21 @@ object Ps4Server {
             val st = j.optJSONObject("settings")
             ServerInfo(j.optString("version"), true, st?.optInt("max_parallel", 2) ?: 2, st?.optInt("max_conns_per_download", 8) ?: 8,
                 st?.optBoolean("auto_conns", true) ?: true, st?.optInt("fixed_conns", 4) ?: 4,
-                rootsOf(st), j.optInt("fs_api"), st?.optBoolean("token_set", false) ?: false, roRoots = rootsOf(st, "fs_ro_roots"))
+                rootsOf(st), j.optInt("fs_api"), st?.optBoolean("token_set", false) ?: false, roRoots = rootsOf(st, "fs_ro_roots"), trophySync = j.optInt("trophy_sync") > 0)
         } else if (r.code == 404) ServerInfo("original", false, 1, 1, false, 1)
         else null
     } catch (e: Exception) { null }
+    /** State of the server's trophy sync (POST /v2/trophy/sync starts it, GET /v2/trophy/status reads it). */
+    class TrophyStatus(val running: Boolean, val runs: Int, val total: Int, val done: Int, val exported: Int, val failed: Int, val log: List<String>)
+    private fun trophyStatusOf(r: Reply): TrophyStatus? {
+        val j = if (r.code == 200) runCatching { JSONObject(r.body) }.getOrNull() else null
+        if (j == null) return null
+        val a = j.optJSONArray("log")
+        val lines = if (a == null) emptyList() else (0 until a.length()).map { a.optString(it) }
+        return TrophyStatus(j.optBoolean("running"), j.optInt("runs"), j.optInt("total"), j.optInt("done"), j.optInt("exported"), j.optInt("failed"), lines)
+    }
+    fun trophySync(ps4: Ps4, force: Boolean): TrophyStatus? = try { trophyStatusOf(call(ps4, "POST", "/v2/trophy/sync", if (force) "{\"force\":true}" else "{}", 8000)) } catch (e: Exception) { null }
+    fun trophyStatus(ps4: Ps4): TrophyStatus? = try { trophyStatusOf(call(ps4, "GET", "/v2/trophy/status", null, 5000)) } catch (e: Exception) { null }
     /** Forget what was detected (after the server was replaced). */
     fun forget(ps4: Ps4) { v2cache.remove(ps4.id) }
     fun updateSettings(ps4: Ps4, json: String): Ctl = control(ps4, "/v2/settings", json)

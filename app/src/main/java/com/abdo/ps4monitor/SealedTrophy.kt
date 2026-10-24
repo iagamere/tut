@@ -129,3 +129,48 @@ object SealedTrophy {
         }
     }
 }
+
+/** Asks the server (abdo17 and later) to export every game's sealed trophy progress; the server skips images that did not change. */
+object TrophySync {
+    private val last = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /** Blocking. Returns the final status, or null when the server cannot do it or a sync already ran in the last 2 minutes (unless [force]). */
+    fun ensure(ps4: Ps4, force: Boolean, onStage: (String) -> Unit): Ps4Server.TrophyStatus? {
+        val now = System.currentTimeMillis()
+        if (!force && now - (last[ps4.id] ?: 0L) < 120_000L) return null
+        var st = Ps4Server.trophySync(ps4, force) ?: return null
+        last[ps4.id] = now
+        var waited = 0
+        while (st.running && waited < 120_000) {
+            onStage(tr("Updating trophy data on the console…", "جارٍ تحديث بيانات الإنجازات من الجهاز…") + " (" + st.done + "/" + st.total + ")")
+            Thread.sleep(1500); waited += 1500
+            st = Ps4Server.trophyStatus(ps4) ?: break
+        }
+        last[ps4.id] = System.currentTimeMillis()
+        return st
+    }
+}
+
+/** Shown instead of the experimental helper panel when the server does the sync itself. */
+@Composable fun TrophyRefreshPanel(ps4: Ps4, onDone: suspend () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var stage by remember { mutableStateOf("") }
+    var report by remember { mutableStateOf<List<String>>(emptyList()) }
+    Panel {
+        SectionTitleHelp(tr("Trophy data from the console", "بيانات الإنجازات من الجهاز"),
+            tr("Games that were never synced with PSN keep their progress in an encrypted file on the PS4. The server opens those files itself and the app reads the result. This runs by itself when you open a game's trophies; use the button to force a fresh copy after you earned something new.",
+               "الألعاب التي لم تُزامَن مع PSN تحفظ تقدّمها في ملف مشفّر على الـPS4. السيرفر يفتح هذه الملفات بنفسه والتطبيق يقرأ النتيجة. يحدث هذا تلقائياً عند فتح إنجازات أي لعبة؛ استخدم الزر لفرض نسخة جديدة بعد أن تحقق إنجازاً جديداً."))
+        Button(enabled = !busy, onClick = {
+            busy = true; report = emptyList()
+            scope.launch {
+                val r = withContext(Dispatchers.IO) { try { TrophySync.ensure(ps4, true) { stage = it } } catch (e: Exception) { null } }
+                report = r?.log?.takeLast(8) ?: listOf(tr("The server did not answer the trophy request.", "لم يستجب السيرفر لطلب الإنجازات."))
+                try { onDone() } catch (e: Exception) { }
+                busy = false; stage = ""
+            }
+        }) { Lbl(tr("Refresh from the console", "تحديث من الجهاز")) }
+        if (busy) { LinearProgressIndicator(Modifier.fillMaxWidth()); Dim(stage) }
+        report.forEach { Dim(it) }
+    }
+}

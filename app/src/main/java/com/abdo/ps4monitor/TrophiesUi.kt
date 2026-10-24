@@ -51,7 +51,7 @@ private object UrlIcons {
     }
 }
 
-private class TrophyData(val accounts: List<Account>, val pack: TrophyPack?, val npwrs: List<String>, val notes: List<String>)
+private class TrophyData(val accounts: List<Account>, val pack: TrophyPack?, val npwrs: List<String>, val notes: List<String>, val serverSync: Boolean = false)
 
 /** Ring with the progress of one account around its picture (PS4 style circles). */
 @Composable private fun AccountCircle(ps4: Ps4, a: Account, pct: Int?, selected: Boolean, onClick: () -> Unit) {
@@ -108,19 +108,22 @@ private class TrophyData(val accounts: List<Account>, val pack: TrophyPack?, val
 @Composable internal fun TrophiesTab(ps4: Ps4, g: GameInfo) {
     val ctx = LocalContext.current
     var data by remember(ps4.id, g.titleId) { mutableStateOf<TrophyData?>(null) }
+    var syncMsg by remember { mutableStateOf("") }
     LaunchedEffect(ps4.id, g.titleId) {
         data = withContext(Dispatchers.IO) {
+            val sup = Ps4Server.info(ps4, 3000)?.trophySync == true
+            if (sup) { try { TrophySync.ensure(ps4, false) { syncMsg = it } } catch (e: Exception) { } }
             val (acc, n1) = TrophyLib.accounts(ps4)
             val notes = ArrayList<String>(n1)
             val npwrs = TrophyLib.npwrIds(ps4, g.titleId, notes)
             var pk = TrophyLib.loadPack(ps4, g.titleId, npwrs, notes)
             if (pk == null) pk = TrophyLib.findPackByTitle(ps4, g.title, notes)
             if (pk == null) notes += TrophyLib.listing(ps4, g.titleId)
-            TrophyData(acc, pk, npwrs, notes)
+            TrophyData(acc, pk, npwrs, notes, sup)
         }
     }
     val d = data
-    if (d == null) { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { LinearProgressIndicator(Modifier.fillMaxWidth()); Dim(tr("Reading trophies…", "جارٍ قراءة الإنجازات…")) }; return }
+    if (d == null) { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { LinearProgressIndicator(Modifier.fillMaxWidth()); Dim(tr("Reading trophies…", "جارٍ قراءة الإنجازات…")); if (syncMsg.isNotEmpty()) Dim(syncMsg) }; return }
     val pack = d.pack
     val states = remember(ps4.id, g.titleId) { mutableStateMapOf<String, TrophyState>() }
     LaunchedEffect(d.accounts) {
@@ -199,9 +202,10 @@ private class TrophyData(val accounts: List<Account>, val pack: TrophyPack?, val
             } else trophies.forEach { key(it.id) { TrophyRow(ps4, pack, it, null, false) } }
             val sealedNpwr = d.npwrs.firstOrNull()
             if ((st.unlocked == null || earned.isEmpty() || st.notes.any { it.startsWith("From the sealed trophy image") }) && sealedNpwr != null) {
-                SealedTrophyPanel(ps4, acc.id, sealedNpwr) {
+                val reload: suspend () -> Unit = {
                     states[acc.id] = withContext(Dispatchers.IO) { runCatching { TrophyLib.state(ps4, acc, sealedNpwr, ctx.cacheDir, g.title) }.getOrElse { TrophyState(null, listOf("${acc.name}: ${it.message ?: it.javaClass.simpleName}")) } }
                 }
+                if (d.serverSync) TrophyRefreshPanel(ps4, reload) else SealedTrophyPanel(ps4, acc.id, sealedNpwr, reload)
             }
             if (st.unlocked == null || earned.isEmpty()) {
                 val clip = androidx.compose.ui.platform.LocalClipboardManager.current
