@@ -106,7 +106,7 @@ object SealedTrophy {
 }
 
 /** Button + result of the experimental sealed-image reader, shown under a game's trophies when its progress could not be read. */
-@Composable fun SealedTrophyPanel(ps4: Ps4, acct: String, npwr: String) {
+@Composable fun SealedTrophyPanel(ps4: Ps4, acct: String, npwr: String, onDone: suspend () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val clip = LocalClipboardManager.current
@@ -120,7 +120,7 @@ object SealedTrophy {
         Dim(tr("Needs GoldHEN's payload loader (port 9090). Nothing is changed on the console's trophy data.", "يحتاج محمّل الـpayload في GoldHEN (المنفذ 9090). لا يتم تغيير أي شيء في بيانات الإنجازات."))
         Button(enabled = !busy, onClick = {
             busy = true; res = null
-            scope.launch { res = try { SealedTrophy.run(ctx, ps4, acct, npwr) { stage = it } } catch (e: Exception) { SealedTrophy.Result(listOf("Failed: ${e.message}"), "", false) }; busy = false; stage = "" }
+            scope.launch { res = try { SealedTrophy.run(ctx, ps4, acct, npwr) { stage = it } } catch (e: Exception) { SealedTrophy.Result(listOf("Failed: ${e.message}"), "", false) }; if (res?.ok == true) { try { onDone() } catch (e: Exception) { } }; busy = false; stage = "" }
         }) { Lbl(tr("Try to read it", "جرّب القراءة")) }
         if (busy) { LinearProgressIndicator(Modifier.fillMaxWidth()); Dim(stage) }
         res?.let { r ->

@@ -1,3 +1,12 @@
+# PS4 Download Monitor 5.9.12
+
+## 5.9.12 unsynced trophies are now read from the sealed image
+- The 5.9.10/11 helper WORKED on the user's console (Hollow Knight, NPWR16485_00): sealedkey decrypted, trophy.img mounted, `TRPTITLE.DAT` (9856 B) and `TRPTRANS.DAT` (26064 B) copied, unmount 0x0.
+- `TrophyLib.parseTrpTitle` reads TRPTITLE.DAT: table type 0x800 (35 entries, one per trophy) = id, unlocked flag, two times (microseconds since year 1). Checked on the real file: 19 of 35 unlocked, all times fall between 2026-09-23 and 2026-10-10 (plausible); grades in table 0x500 (1 P, 2 G, 3 S, 4 B). The unlock-time column choice (first of the two) and "flag = unlocked" are inferred from this one dump, not documented anywhere.
+- `TrophyLib.state` uses the exported file for accounts whose game is not in trophy_net.db. After a successful run the panel refreshes the list by itself; the data is a snapshot: run the helper again to refresh after playing.
+- TRPTRANS.DAT (transaction/sync data) is exported but not used.
+- Not compiled here (no Android SDK).
+
 # PS4 Download Monitor 5.9.11
 
 ## 5.9.11 fix: the sealed-trophy panel was hidden

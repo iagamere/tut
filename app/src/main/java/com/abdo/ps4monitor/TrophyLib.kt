@@ -446,6 +446,48 @@ object TrophyLib {
         return null
     }
 
+    /**
+     * TRPTITLE.DAT, as exported by the helper from the sealed trophy.img (layout checked against a real file of the user's console):
+     * header 0x30 bytes (magic 8D 1F 8D 08, big-endian entry count at 8), then 0x20-byte index entries {type, entry size, 1, repeat count, u64 offset}.
+     * Each data entry is a 16-byte header followed by its data. Type 0x800 (one entry per trophy, size 0x50): u32 trophy id, u32 unlocked (0/1),
+     * u32 0x2000, u32 0, then two u64 times in microseconds since year 1 (unlock time first). Type 0x500: id, grade (1 P, 2 G, 3 S, 4 B), hidden.
+     * Returns trophy id -> unlock time in seconds (an empty map = nothing unlocked), or null when the file has no 0x800 table.
+     */
+    internal fun parseTrpTitle(b: ByteArray, notes: MutableList<String>): Map<Int, Long>? {
+        if (b.size < 0x30 || be32(b, 0) != 0x8D1F8D08L) { notes += "TRPTITLE.DAT: unknown header: " + hex(b, 32); return null }
+        val n = be32(b, 8).toInt()
+        if (n !in 1..64 || 0x30 + n * 0x20 > b.size) { notes += "TRPTITLE.DAT: odd table count $n"; return null }
+        val out = HashMap<Int, Long>(); var total = 0
+        for (t in 0 until n) {
+            val o = 0x30 + t * 0x20
+            val type = be32(b, o); val sz = be32(b, o + 4).toInt(); val cnt = be32(b, o + 12).toInt(); val off = be64(b, o + 16)
+            if (type != 0x800L || sz < 0x20 || sz > 0x400 || cnt !in 1..4000) continue
+            for (i in 0 until cnt) {
+                val e = off + i.toLong() * (sz + 0x10) + 0x10
+                if (e < 0 || e + 0x20 > b.size) break
+                val p = e.toInt()
+                total++
+                val id = be32(b, p).toInt()
+                if (be32(b, p + 4) == 0L) continue
+                val secs = be64(b, p + 0x10) / 1_000_000L - 62_135_596_800L      // microseconds since year 1
+                out[id] = if (secs in 946_684_800L..4_102_444_800L) secs else 0L
+            }
+        }
+        if (total == 0) { notes += "TRPTITLE.DAT has no per-trophy table (type 0x800)"; return null }
+        return out
+    }
+
+    /** Progress exported earlier by the helper (SealedTrophy) for this account and game, or null when it was never exported. */
+    private fun readExport(ps4: Ps4, account: Account, npwr: String, notes: MutableList<String>): Map<Int, Long>? {
+        if (npwr.isBlank()) return null
+        val path = "/data/ezremote-client/trophy_export/${account.id}_$npwr/TRPTITLE.DAT"
+        val b = try { Ps4Server.fsRead(ps4, path, 0, 1 shl 20, 10000) } catch (e: Exception) { return null }
+        if (b.isEmpty()) return null
+        val m = parseTrpTitle(b, notes) ?: return null
+        notes += "From the sealed trophy image (copied earlier by the helper; use the button below to refresh): ${m.size} unlocked"
+        return m
+    }
+
     /** Unlocked trophies of [account] for the game with NPWR id [npwr]. */
     fun state(ps4: Ps4, account: Account, npwr: String, cache: File, gameTitle: String = ""): TrophyState {
         run {
@@ -455,6 +497,7 @@ object TrophyLib {
             if (r != null) return TrophyState(r.trophies.filter { it.unlocked }.associate { it.id to it.time }, n, r)
             // not synced with PSN: look for the account's own progress file of this game
             runCatching { readUsr(ps4, account, npwr, n) }.getOrNull()?.let { return TrophyState(it, n) }
+            runCatching { readExport(ps4, account, npwr, n) }.getOrNull()?.let { return TrophyState(it, n) }
             // the database was read and simply has no entry for this game: this account has not played it (0%), no need to scan other files
             if (opened[0]) return TrophyState(emptyMap(), n)
             // otherwise fall through to the generic search below; keep the reason
