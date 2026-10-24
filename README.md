@@ -1,3 +1,8 @@
+# PS4 Download Monitor 5.9.11
+
+## 5.9.11 fix: the sealed-trophy panel was hidden
+- In 5.9.10 the "Read the sealed trophy file" panel only appeared when the unlocked map was null; for a game with no record it is an empty map (all trophies shown locked), so the panel never showed. It now appears whenever nothing could be read or nothing is earned (and an NPWR id is known).
+
 # PS4 Download Monitor 5.9.10
 
 ## 5.9.10 experimental reader for games whose trophies are not synced (sealed trophy.img)
