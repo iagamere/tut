@@ -1,3 +1,8 @@
+# PS4 Download Monitor 5.9.16
+
+## 5.9.16 trophy pictures instead of coloured dots
+- The platinum / gold / silver / bronze pictures supplied by the user (res/drawable-nodpi/trophy_*.png, reduced to 96x121 px) replace the coloured circles next to each trophy and in the per-grade counters. A grey dot stays for a trophy whose grade is unknown. Not compiled here.
+
 # PS4 Download Monitor 5.9.15
 
 ## 5.9.15 build fix

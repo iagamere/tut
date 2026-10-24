@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -36,6 +37,13 @@ import java.util.Locale
 
 private val PLAT = Color(0xFF7FB2E5); private val GOLD = Color(0xFFE2B33C); private val SILV = Color(0xFFB4BCC6); private val BRON = Color(0xFFC07A3E)
 private fun gradeColor(g: Char) = when (g) { 'P' -> PLAT; 'G' -> GOLD; 'S' -> SILV; 'B' -> BRON; else -> Color(0xFF8A8F98) }
+
+/** The real trophy picture of a grade (platinum, gold, silver, bronze); a grey dot while the grade is unknown. */
+@Composable private fun GradeIcon(g: Char, height: androidx.compose.ui.unit.Dp) {
+    val res = when (g) { 'P' -> R.drawable.trophy_platinum; 'G' -> R.drawable.trophy_gold; 'S' -> R.drawable.trophy_silver; 'B' -> R.drawable.trophy_bronze; else -> 0 }
+    if (res == 0) Box(Modifier.size(height * 0.6f).clip(CircleShape).background(gradeColor(g)))
+    else Image(painterResource(res), null, Modifier.size(width = height * 0.8f, height = height), contentScale = ContentScale.Fit)
+}
 private fun gradeName(g: Char) = when (g) { 'P' -> tr("Platinum", "بلاتينية"); 'G' -> tr("Gold", "ذهبية"); 'S' -> tr("Silver", "فضية"); 'B' -> tr("Bronze", "برونزية"); else -> tr("Trophy", "كأس") }
 
 /** Trophy pictures that the console only stores as web addresses (trophy_net.db icon_url): downloaded by the phone and kept in memory. */
@@ -97,7 +105,7 @@ private class TrophyData(val accounts: List<Account>, val pack: TrophyPack?, val
             if (got && earnedAt != null && earnedAt > 0) Dim(tr("Earned ", "حُقّق ") + SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(earnedAt * 1000)))
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(Modifier.size(14.dp).clip(CircleShape).background(gradeColor(t.grade)))
+            GradeIcon(t.grade, 26.dp)
             if (t.grade != '?') Dim(gradeName(t.grade), maxLines = 1)
             if (known) Dim(if (got) "✓" else "🔒", maxLines = 1)
         }
@@ -188,7 +196,7 @@ private class TrophyData(val accounts: List<Account>, val pack: TrophyPack?, val
                         listOf('P', 'G', 'S', 'B').forEach { gr ->
                             val all = trophies.count { it.grade == gr }
                             if (all > 0) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Box(Modifier.size(12.dp).clip(CircleShape).background(gradeColor(gr))); Text("${earned.count { it.grade == gr }}/$all", style = MaterialTheme.typography.bodyMedium)
+                                GradeIcon(gr, 20.dp); Text("${earned.count { it.grade == gr }}/$all", style = MaterialTheme.typography.bodyMedium)
                             }
                         }
                     }
