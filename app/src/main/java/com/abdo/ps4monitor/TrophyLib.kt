@@ -6,6 +6,9 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.ConcurrentHashMap
+import javax.crypto.Cipher
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
 
 /** A console account: its folder id (8 hex digits under /user/home) and the name from username.dat. */
 data class Account(val id: String, val name: String, val avatarPaths: List<String>)
@@ -145,6 +148,38 @@ object TrophyLib {
 
     private fun hex(b: ByteArray, n: Int = 32) = b.take(n).joinToString(" ") { "%02X".format(it) }
 
+    /** Trophy key published on the PS4 developer wiki (Trophy00.trp page). */
+    private val TROPHY_KEY = intArrayOf(0x21, 0xF4, 0x1A, 0x6B, 0xAD, 0x8A, 0x1D, 0x3E, 0xCA, 0x7A, 0xD5, 0x86, 0xC1, 0x01, 0xB7, 0xA9).map { it.toByte() }.toByteArray()
+
+    private fun aesCbc(encrypt: Boolean, key: ByteArray, iv: ByteArray, data: ByteArray): ByteArray {
+        val c = Cipher.getInstance("AES/CBC/NoPadding")
+        c.init(if (encrypt) Cipher.ENCRYPT_MODE else Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"), IvParameterSpec(iv))
+        return c.doFinal(data)
+    }
+
+    /**
+     * TROP.ESFM (names and descriptions of a PS4 trophy pack): per the PS4 developer wiki, the AES key of the pack is the NP communication id
+     * (12 ASCII bytes, zero-padded to 16) encrypted with the trophy key (AES-128-CBC, zero IV); the file is a 16-byte IV followed by the
+     * AES-128-CBC encrypted XML. Returns the XML when the result contains <trophyconf, otherwise null. The wiki leaves the key-generation IV
+     * and the padding open, so two readings are tried; neither was checked against a real file here.
+     */
+    internal fun decryptEsfm(npwr: String, data: ByteArray): String? {
+        if (npwr.length < 12 || data.size < 48) return null
+        return try {
+            val id = ByteArray(16); val ascii = npwr.toByteArray(Charsets.US_ASCII)
+            System.arraycopy(ascii, 0, id, 0, minOf(16, ascii.size))
+            val key = aesCbc(true, TROPHY_KEY, ByteArray(16), id)
+            val attempts = listOf(16 to data.copyOfRange(0, 16), 0 to ByteArray(16))
+            for ((skip, iv) in attempts) {
+                val n = (data.size - skip) / 16 * 16
+                if (n <= 0) continue
+                val xml = String(aesCbc(false, key, iv, data.copyOfRange(skip, skip + n)), Charsets.UTF_8).trimEnd('\u0000')
+                if (xml.contains("<trophyconf", true)) return xml
+            }
+            null
+        } catch (e: Exception) { null }
+    }
+
     private fun loadPackFrom(ps4: Ps4, dir: String, npwrs: List<String>, notes: MutableList<String>): TrophyPack? {
         val all = try { Ps4Server.fsList(ps4, dir, 8000) } catch (e: Exception) { notes += "$dir: ${e.message}"; return null }
         val trps = all.filter { !it.isDir && it.name.endsWith(".trp", true) }.sortedBy { it.name }
@@ -190,7 +225,17 @@ object TrophyLib {
                 } else notes += "$path: no TROPnnn.PNG names in the first ${scan.size} bytes" + (if (scan.isNotEmpty()) " (start: " + hex(scan, 64) + ")" else "")
             }
             val cfg = files.entries.firstOrNull { it.key.endsWith(".SFM", true) }
-            val xml = cfg?.let { (_, v) -> runCatching { String(Ps4Server.fsRead(ps4, path, v.first, v.second.coerceAtMost(2L shl 20).toInt(), 15000), Charsets.UTF_8) }.getOrNull() }
+            var xml = cfg?.let { (_, v) -> runCatching { String(Ps4Server.fsRead(ps4, path, v.first, v.second.coerceAtMost(2L shl 20).toInt(), 15000), Charsets.UTF_8) }.getOrNull() }
+            if (xml == null || !xml.contains("<trophyconf", true)) {
+                // PS4 packs keep the names in TROP.ESFM (AES-encrypted XML), see decryptEsfm
+                val es = files.entries.firstOrNull { it.key.equals("TROP.ESFM", true) } ?: files.entries.firstOrNull { it.key.endsWith(".ESFM", true) }
+                if (es != null) {
+                    val id = Regex("NPWR\\d{5}_\\d{2}").find(t.name)?.value ?: Regex("NPWR\\d{5}_\\d{2}").find(dir)?.value ?: npwrs.getOrNull(trps.indexOf(t)) ?: npwrs.firstOrNull() ?: ""
+                    val raw = runCatching { Ps4Server.fsRead(ps4, path, es.value.first, es.value.second.coerceIn(0L, 2L shl 20).toInt(), 15000) }.getOrNull()
+                    val dec = if (raw != null) decryptEsfm(id, raw) else null
+                    if (dec != null) xml = dec else notes += "$path: ${es.key} could not be decrypted (id '$id', ${raw?.size ?: -1} bytes, start " + (if (raw != null) hex(raw, 16) else "-") + ")"
+                }
+            }
             val list = ArrayList<Trophy>(); var title = ""; var readable = false
             if (xml != null && xml.contains("<trophyconf", true)) {
                 title = Regex("<title-name>(.*?)</title-name>", RegexOption.DOT_MATCHES_ALL).find(xml)?.groupValues?.get(1)?.let(::unesc) ?: ""

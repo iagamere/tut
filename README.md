@@ -1,3 +1,9 @@
+# PS4 Download Monitor 5.9.14
+
+## 5.9.14 trophy names from TROP.ESFM
+- Games not synced with PSN showed "Trophy 000..034" because the pack's names live in `TROP.ESFM`, which is AES-encrypted and was never tried (the code only looked for PS3 `.SFM` entries). `TrophyLib.decryptEsfm` follows the PS4 developer wiki: key = AES-128-CBC(trophy key 21F41A6B..., zero IV, NP id zero-padded to 16 bytes); file = 16-byte IV + AES-128-CBC XML. Two readings of the open details (key-generation IV, where the IV sits) are tried; the result must contain `<trophyconf` or the failure is written into the technical notes (with the first bytes).
+- NOT verified against a real ESFM file (none was available here). Not compiled (no Android SDK). If names still show as numbers, copy the technical details and send them.
+
 # PS4 Download Monitor 5.9.13
 
 ## 5.9.13 trophy export built into the server (abdo17), no per-game button
