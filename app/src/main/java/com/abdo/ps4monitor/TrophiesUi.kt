@@ -197,6 +197,8 @@ private class TrophyData(val accounts: List<Account>, val pack: TrophyPack?, val
                 if (earned.isNotEmpty()) { SectionTitle(tr("Earned", "المحققة") + " (${earned.size})"); earned.sortedByDescending { u[it.id] ?: 0L }.forEach { key(it.id) { TrophyRow(ps4, pack, it, u[it.id], true) } } }
                 if (missing.isNotEmpty()) { SectionTitle(tr("Not earned yet", "غير محققة") + " (${missing.size})"); missing.forEach { key(it.id) { TrophyRow(ps4, pack, it, null, true) } } }
             } else trophies.forEach { key(it.id) { TrophyRow(ps4, pack, it, null, false) } }
+            val sealedNpwr = d.npwrs.firstOrNull()
+            if (st.unlocked == null && sealedNpwr != null) SealedTrophyPanel(ps4, acc.id, sealedNpwr)
             if (st.unlocked == null || earned.isEmpty()) {
                 val clip = androidx.compose.ui.platform.LocalClipboardManager.current
                 NoteList(st.notes + tr("Device tab > Scan trophies: send the result so the reader can be matched to this console.", "تبويب الجهاز > فحص الإنجازات: أرسل النتيجة ليُضبط القارئ على هذا الجهاز."))

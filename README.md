@@ -1,3 +1,13 @@
+# PS4 Download Monitor 5.9.10
+
+## 5.9.10 experimental reader for games whose trophies are not synced (sealed trophy.img)
+- Base: the 5.9.9 package from the other session (its TrophyLib/TrophiesUi changes are kept).
+- Finding (from the user's console log): `/user/home/<id>/trophy/data/NPWR16485_00` holds only `sealedkey` (96 B) and `trophy.img` (2 MB). The progress of a game that was never synced with PSN lives only in that encrypted PFS image, so no file reader can see it.
+- New helper payload `trophymount.elf` (source: `payload/trophymount/trophymount.c`, built with the Orbis toolchain, links without warnings, NEVER RUN on a console). It follows the open-source tool Apollo (apollo-ps4, GPLv3): decrypt `sealedkey` through `/dev/sbl_srv` (ioctl 0xC0845302), `sceFsMountSaveData` from `libSceFsInternalForVsh.sprx` with budget "system", copy the files inside to `/data/ezremote-client/trophy_export/<account>_<NPWR>/`, unmount. It does NOT change process credentials (Apollo does, through libjbc), so the console may simply refuse a step; each step and error code is written to `<export>/_result.txt` and `/data/ezremote_trophy.log`.
+- App: under a game's trophies, when the progress could not be read, a panel "Read the sealed trophy file (experimental)" sends the helper, waits, re-sends the server if the loader replaced it, shows the report and offers "Copy report and files (hex)".
+- NOT done: parsing the unlocked flags. The PS4 layout of TRPTITLE.DAT is only partly documented, so this version only exports and shows the files. Send the copied report so the parser can be written from real data.
+- Not compiled here (no Android SDK).
+
 # PS4 Download Monitor 5.9.5
 
 ## 5.9.5 tutorial, "?" help buttons, shutdown feature removed
