@@ -1,3 +1,8 @@
+# PS4 Download Monitor 5.9.17
+
+## 5.9.17 vector icons instead of emoji
+- The only emoji / symbol icons left in the interface were the lock and the check mark in the trophy list (TrophiesUi) and the check mark next to a likely PS4 in Find my PS4 (SettingsUi). They are now the app's vector drawables (ic_lock, ic_check_circle: Android's own format for SVG paths). Plain text separators ("•", "→", "⋮" inside sentences) were left as text on purpose. No other emoji was found in the Kotlin code or the XML resources. Not compiled here.
+
 # PS4 Download Monitor 5.9.16
 
 ## 5.9.16 trophy pictures instead of coloured dots

@@ -107,7 +107,7 @@ private class TrophyData(val accounts: List<Account>, val pack: TrophyPack?, val
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             GradeIcon(t.grade, 26.dp)
             if (t.grade != '?') Dim(gradeName(t.grade), maxLines = 1)
-            if (known) Dim(if (got) "✓" else "🔒", maxLines = 1)
+            if (known) { if (got) Ico(R.drawable.ic_check_circle, 18.dp, MaterialTheme.colorScheme.primary) else Ico(R.drawable.ic_lock, 18.dp, MaterialTheme.colorScheme.onSurfaceVariant) }
         }
     }
 }

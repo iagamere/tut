@@ -161,7 +161,7 @@ import kotlinx.coroutines.withContext
             found.sortedByDescending { it.likely }.forEach { f ->
                 Card(onClick = { host = f.host }, modifier = full, colors = CardDefaults.cardColors(containerColor = if (f.host == host) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh)) {
                     Column(Modifier.padding(12.dp)) {
-                        Text(f.host + if (f.likely) "   ✓" else "", fontWeight = FontWeight.SemiBold)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) { Text(f.host, fontWeight = FontWeight.SemiBold); if (f.likely) Ico(R.drawable.ic_check_circle, 18.dp, MaterialTheme.colorScheme.primary) }
                         Dim((if (f.server) tr("PS4 server (", "خادم PS4 (") + f.serverKind + "), " else "") + (if (f.loader) tr("GoldHEN loader, ", "محمّل GoldHEN، ") else "") + tr("open ports: ", "المنافذ المفتوحة: ") + f.ports)
                     }
                 }
